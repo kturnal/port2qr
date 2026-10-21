@@ -1,0 +1,48 @@
+# Dependencies and package-manager output
+node_modules/
+*.tgz
+
+# Build, test, and coverage output
+dist/
+build/
+coverage/
+.nyc_output/
+tmp/
+temp/
+
+# Logs and process files
+*.log
+*.pid
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files and local package credentials
+.env
+.env.*
+!.env.example
+.npmrc
+
+# Cloudflare credentials and local tunnel state
+.cloudflared/
+.cloudflare/
+.wrangler/
+.dev.vars
+.dev.vars.*
+cert.pem
+credentials.json
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo

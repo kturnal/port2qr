@@ -1,0 +1,44 @@
+{
+  "name": "port2qr",
+  "version": "0.1.0",
+  "description": "Share a local web server through a temporary Cloudflare Tunnel and scan it from a phone.",
+  "type": "module",
+  "bin": {
+    "port2qr": "bin/port2qr.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "check": "node --check bin/port2qr.mjs && node --check src/options.mjs && node --check src/tunnel-url.mjs",
+    "test": "node --test",
+    "prepublishOnly": "npm run check && npm test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "cloudflare",
+    "cloudflared",
+    "tunnel",
+    "qr-code",
+    "localhost",
+    "mobile-testing",
+    "cli"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kturnal/port2qr.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kturnal/port2qr/issues"
+  },
+  "homepage": "https://github.com/kturnal/port2qr#readme",
+  "license": "MIT",
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0"
+  }
+}
