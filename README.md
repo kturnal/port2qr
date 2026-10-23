@@ -9,10 +9,13 @@ Local server → cloudflared → temporary HTTPS URL → terminal QR code → ph
 
 ## Requirements
 
-- Node.js 18 or newer
+- Node.js 22 or newer
 - [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/)
   installed and available on `PATH`
 - An internet connection
+
+Runtime support follows the maintained Node.js LTS lines, and support for a release line ends when
+it reaches upstream end-of-life.
 
 Cloudflare Quick Tunnels do not require a Cloudflare account, token, domain, or inbound firewall
 rule. They are intended for development and testing, not production hosting.
