@@ -12,6 +12,10 @@ import os from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
 import {fileURLToPath} from 'node:url'
+import {
+  processGroupIsRunning as posixProcessGroupIsRunning,
+  processIsRunning,
+} from '../src/process-liveness.mjs'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 const cliPath = path.join(packageRoot, 'bin', 'port2qr.mjs')
@@ -50,27 +54,9 @@ function matches(value, expected) {
   return expected.test(value)
 }
 
-function processIsRunning(pid) {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    if (error.code === 'ESRCH') return false
-    if (error.code === 'EPERM') return true
-    throw error
-  }
-}
-
 function processGroupIsRunning(pid) {
   if (process.platform === 'win32') return processIsRunning(pid)
-  try {
-    process.kill(-pid, 0)
-    return true
-  } catch (error) {
-    if (error.code === 'ESRCH') return false
-    if (error.code === 'EPERM') return true
-    throw error
-  }
+  return posixProcessGroupIsRunning(pid)
 }
 
 async function installFakeCloudflared(binDir) {

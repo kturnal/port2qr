@@ -22,3 +22,5 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - name: Run lifecycle tests under a non-reaping PID 1
+        run: sudo unshare --pid --fork --mount-proc "$(command -v node)" --test test/cli-lifecycle.test.mjs
