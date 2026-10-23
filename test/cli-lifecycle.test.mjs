@@ -8,6 +8,10 @@ import test from 'node:test'
 import {createCliHarness, originFixturePath} from '../test-fixtures/cli-harness.mjs'
 
 const TEST_TUNNEL_URL = 'https://deterministic-test.trycloudflare.com'
+// The CLI escalates to SIGKILL after a 3-second graceful wait, so exiting sooner shows it
+// did not keep waiting on stopped descendants (for example zombies left by a non-reaping
+// PID 1).
+const PROMPT_EXIT_MS = 3_000
 const lifecycleTest = process.platform === 'win32' ? test.skip : test
 
 async function listen(server) {
@@ -91,7 +95,7 @@ lifecycleTest('starts an owned origin and passes command arguments without a she
 
   await run.waitForOutput(TEST_TUNNEL_URL)
   run.signal('SIGTERM')
-  assertExit(await run.waitForExit(), 0)
+  assertExit(await run.waitForExit(PROMPT_EXIT_MS), 0)
 
   assert.deepEqual(await harness.readStateJson('origin-args.json'), commandArgs)
   assert.deepEqual(await harness.readStateJson('tunnel-args.json'), [
@@ -290,7 +294,7 @@ lifecycleTest('handles SIGINT while waiting for the tunnel URL', {timeout: 15_00
 
   await harness.waitForState('tunnel.pid')
   run.signal('SIGINT')
-  assertExit(await run.waitForExit(), 0)
+  assertExit(await run.waitForExit(PROMPT_EXIT_MS), 0)
 
   assert.match(run.stdout, /Stopping port2qr/)
   assert.doesNotMatch(run.stderr, /port2qr:/)

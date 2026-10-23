@@ -10,6 +10,7 @@ import process from 'node:process'
 import {createRequire} from 'node:module'
 import qrcode from 'qrcode-terminal'
 import {HELP, parseArgs} from '../src/options.mjs'
+import {processGroupIsRunning} from '../src/process-liveness.mjs'
 import {findQuickTunnelUrl} from '../src/tunnel-url.mjs'
 
 const require = createRequire(import.meta.url)
@@ -201,14 +202,7 @@ function renderQr(url) {
 function processIsRunning(child) {
   if (!child) return false
   if (isWindows) return child.exitCode === null && child.signalCode === null
-  try {
-    process.kill(-child.pid, 0)
-    return true
-  } catch (error) {
-    if (error.code === 'ESRCH') return false
-    if (error.code === 'EPERM') return true
-    throw error
-  }
+  return processGroupIsRunning(child.pid)
 }
 
 function signalProcess(child, signal) {

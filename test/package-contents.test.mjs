@@ -23,6 +23,7 @@ test('publishes the runtime files plus the security policy', () => {
     'bin/port2qr.mjs',
     'package.json',
     'src/options.mjs',
+    'src/process-liveness.mjs',
     'src/tunnel-url.mjs',
   ])
 })

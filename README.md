@@ -85,6 +85,15 @@ npm run check
 npm test
 ```
 
+On Linux, `port2qr` and the lifecycle tests read `/proc` to tell zombie processes from live ones, so
+no init process is required in containers whose PID 1 does not reap orphans. This needs `/proc`
+mounted for the container's PID namespace, as Docker and `unshare --mount-proc` do; otherwise run
+the container with `docker run --init`. CI checks this case with:
+
+```bash
+sudo unshare --pid --fork --mount-proc "$(command -v node)" --test test/cli-lifecycle.test.mjs
+```
+
 ## License
 
 [MIT](LICENSE)
