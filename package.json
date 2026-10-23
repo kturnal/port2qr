@@ -19,7 +19,7 @@
     "prepublishOnly": "npm run check && npm test"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
   "keywords": [
     "cloudflare",
