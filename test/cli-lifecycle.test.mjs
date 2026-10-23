@@ -84,7 +84,10 @@ lifecycleTest('starts an owned origin and passes command arguments without a she
     process.execPath,
     originFixturePath,
     ...commandArgs,
-  ], {PORT2QR_ORIGIN_PORT: String(port)})
+  ], {
+    PORT2QR_ORIGIN_PORT: String(port),
+    PORT2QR_ORIGIN_SPAWN_CHILD: '1',
+  })
 
   await run.waitForOutput(TEST_TUNNEL_URL)
   run.signal('SIGTERM')
@@ -92,6 +95,7 @@ lifecycleTest('starts an owned origin and passes command arguments without a she
 
   assert.deepEqual(await harness.readStateJson('origin-args.json'), commandArgs)
   assert.deepEqual(await harness.readStateJson('tunnel-args.json'), [
+    'tunnel',
     '--url',
     `http://127.0.0.1:${port}/`,
     '--http-host-header',
@@ -100,6 +104,7 @@ lifecycleTest('starts an owned origin and passes command arguments without a she
   ])
   await Promise.all([
     harness.assertProcessStopped('origin.pid'),
+    harness.assertPidStopped('origin-child.pid'),
     harness.assertProcessStopped('tunnel.pid'),
   ])
 })
@@ -182,13 +187,17 @@ lifecycleTest('reports a local command that exits before the origin is ready', {
   ], {
     PORT2QR_ORIGIN_EXIT_CODE: '23',
     PORT2QR_ORIGIN_PORT: String(port),
+    PORT2QR_ORIGIN_SPAWN_CHILD: '1',
   })
 
   const result = await run.waitForExit()
 
   assertExit(result, 1)
   assert.match(run.stderr, /Local command exited unexpectedly \(code 23\)/)
-  await harness.assertProcessStopped('origin.pid')
+  await Promise.all([
+    harness.assertProcessStopped('origin.pid'),
+    harness.assertPidStopped('origin-child.pid'),
+  ])
   assert.equal(await harness.stateExists('tunnel.pid'), false)
 })
 
@@ -206,6 +215,36 @@ lifecycleTest('reports a tunnel that exits before publishing a URL', {timeout: 1
   assert.match(run.stderr, /Cloudflare Tunnel exited unexpectedly \(code 17\)/)
   assert.match(run.stderr, /simulated cloudflared failure/)
   await harness.assertProcessStopped('tunnel.pid')
+})
+
+lifecycleTest('reports a tunnel that exits after publishing a URL and stops its peer group', {timeout: 15_000}, async t => {
+  const harness = await createCliHarness(t)
+  const port = await getAvailablePort()
+  const run = harness.start([
+    String(port),
+    '--timeout',
+    '3',
+    '--',
+    process.execPath,
+    originFixturePath,
+  ], {
+    PORT2QR_FAKE_TUNNEL_EXIT_CODE: '18',
+    PORT2QR_FAKE_TUNNEL_MODE: 'exit',
+    PORT2QR_ORIGIN_PORT: String(port),
+    PORT2QR_ORIGIN_SPAWN_CHILD: '1',
+  })
+
+  const result = await run.waitForExit()
+
+  assertExit(result, 1)
+  assert.ok(run.stdout.includes(TEST_TUNNEL_URL))
+  assert.match(run.stdout, /Scan the QR code on your phone/)
+  assert.match(run.stderr, /Cloudflare Tunnel exited unexpectedly \(code 18\)/)
+  await Promise.all([
+    harness.assertProcessStopped('origin.pid'),
+    harness.assertPidStopped('origin-child.pid'),
+    harness.assertProcessStopped('tunnel.pid'),
+  ])
 })
 
 lifecycleTest('handles SIGINT while the owned origin is starting', {timeout: 15_000}, async t => {
@@ -233,6 +272,35 @@ lifecycleTest('handles SIGINT while the owned origin is starting', {timeout: 15_
   assert.equal(await harness.stateExists('tunnel.pid'), false)
 })
 
+lifecycleTest('handles SIGINT while waiting for the tunnel URL', {timeout: 15_000}, async t => {
+  const harness = await createCliHarness(t)
+  const port = await getAvailablePort()
+  const run = harness.start([
+    String(port),
+    '--timeout',
+    '10',
+    '--',
+    process.execPath,
+    originFixturePath,
+  ], {
+    PORT2QR_FAKE_TUNNEL_MODE: 'delay',
+    PORT2QR_ORIGIN_PORT: String(port),
+    PORT2QR_ORIGIN_SPAWN_CHILD: '1',
+  })
+
+  await harness.waitForState('tunnel.pid')
+  run.signal('SIGINT')
+  assertExit(await run.waitForExit(), 0)
+
+  assert.match(run.stdout, /Stopping port2qr/)
+  assert.doesNotMatch(run.stderr, /port2qr:/)
+  await Promise.all([
+    harness.assertProcessStopped('origin.pid'),
+    harness.assertPidStopped('origin-child.pid'),
+    harness.assertProcessStopped('tunnel.pid'),
+  ])
+})
+
 lifecycleTest('handles SIGINT after printing the QR URL and stops both owned processes', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const port = await getAvailablePort()
@@ -249,7 +317,7 @@ lifecycleTest('handles SIGINT after printing the QR URL and stops both owned pro
   run.signal('SIGINT')
   assertExit(await run.waitForExit(), 0)
 
-  assert.match(run.stdout, new RegExp(TEST_TUNNEL_URL.replaceAll('.', '\\.')))
+  assert.ok(run.stdout.includes(TEST_TUNNEL_URL))
   assert.match(run.stdout, /Stopping port2qr/)
   await Promise.all([
     harness.assertProcessStopped('origin.pid'),

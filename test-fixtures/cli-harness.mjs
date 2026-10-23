@@ -1,5 +1,6 @@
 import {spawn} from 'node:child_process'
 import {
+  chmod,
   copyFile,
   link,
   mkdir,
@@ -7,7 +8,7 @@ import {
   readFile,
   rm,
   stat,
-  symlink,
+  writeFile,
 } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -16,7 +17,7 @@ import {fileURLToPath} from 'node:url'
 
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 const cliPath = path.join(packageRoot, 'bin', 'port2qr.mjs')
-const fakeTunnelPath = fileURLToPath(new URL('./fake-tunnel.mjs', import.meta.url))
+const fakeTunnelPath = fileURLToPath(new URL('./fake-tunnel.cjs', import.meta.url))
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -62,26 +63,45 @@ function processIsRunning(pid) {
   }
 }
 
+function processGroupIsRunning(pid) {
+  if (process.platform === 'win32') return processIsRunning(pid)
+  try {
+    process.kill(-pid, 0)
+    return true
+  } catch (error) {
+    if (error.code === 'ESRCH') return false
+    if (error.code === 'EPERM') return true
+    throw error
+  }
+}
+
 async function installFakeCloudflared(binDir, tempRoot) {
   const executableName = process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared'
   const executablePath = path.join(binDir, executableName)
 
   if (process.platform === 'win32') {
+    // Windows lifecycle execution is intentionally deferred to issue #4.
     try {
       await link(process.execPath, executablePath)
     } catch (error) {
       if (error.code !== 'EXDEV') throw error
       await copyFile(process.execPath, executablePath)
     }
+    await copyFile(fakeTunnelPath, path.join(tempRoot, 'tunnel'))
   } else {
-    await symlink(process.execPath, executablePath)
+    // The explicit shim makes the fake independent of the CLI cwd and lets it
+    // observe both the --version probe and the complete tunnel command line.
+    await writeFile(executablePath, [
+      '#!/bin/sh',
+      'exec "$PORT2QR_TEST_NODE_PATH" "$PORT2QR_TEST_FAKE_TUNNEL_PATH" "$@"',
+      '',
+    ].join('\n'))
+    await chmod(executablePath, 0o755)
   }
-
-  await copyFile(fakeTunnelPath, path.join(tempRoot, 'tunnel'))
 }
 
-async function forceStopPid(pid) {
-  if (!processIsRunning(pid)) return
+async function forceStopProcessGroup(pid) {
+  if (!processGroupIsRunning(pid)) return
   try {
     process.kill(process.platform === 'win32' ? pid : -pid, 'SIGKILL')
   } catch (error) {
@@ -107,6 +127,8 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
     HOME: homeDir,
     USERPROFILE: homeDir,
     PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ''}`,
+    PORT2QR_TEST_FAKE_TUNNEL_PATH: fakeTunnelPath,
+    PORT2QR_TEST_NODE_PATH: process.execPath,
     PORT2QR_TEST_STATE_DIR: stateDir,
   }
 
@@ -188,6 +210,16 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
   async function assertProcessStopped(pidFile) {
     await waitForState(pidFile)
     const pid = Number((await readState(pidFile)).trim())
+    await waitUntil(
+      () => !processGroupIsRunning(pid),
+      `process group ${pid} from ${pidFile} to stop`
+    )
+    return pid
+  }
+
+  async function assertPidStopped(pidFile) {
+    await waitForState(pidFile)
+    const pid = Number((await readState(pidFile)).trim())
     await waitUntil(() => !processIsRunning(pid), `process ${pid} from ${pidFile} to stop`)
     return pid
   }
@@ -201,7 +233,7 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
     for (const pidFile of ['origin.pid', 'tunnel.pid']) {
       if (!await stateExists(pidFile)) continue
       const pid = Number((await readState(pidFile)).trim())
-      await forceStopPid(pid)
+      await forceStopProcessGroup(pid)
     }
     await rm(tempRoot, {recursive: true, force: true})
   })
@@ -216,6 +248,7 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
     stateExists,
     waitForState,
     assertProcessStopped,
+    assertPidStopped,
   }
 }
 

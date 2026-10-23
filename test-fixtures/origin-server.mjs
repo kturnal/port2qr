@@ -1,3 +1,4 @@
+import {spawn} from 'node:child_process'
 import {mkdirSync, writeFileSync} from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
@@ -14,6 +15,13 @@ writeFileSync(
   path.join(stateDir, 'origin-args.json'),
   `${JSON.stringify(process.argv.slice(2))}\n`
 )
+
+if (process.env.PORT2QR_ORIGIN_SPAWN_CHILD === '1') {
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    stdio: 'ignore',
+  })
+  writeFileSync(path.join(stateDir, 'origin-child.pid'), `${child.pid}\n`)
+}
 
 const server = http.createServer((_request, response) => {
   response.writeHead(204)
