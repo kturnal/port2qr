@@ -10,7 +10,8 @@
     "bin",
     "src",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "check": "node --check bin/port2qr.mjs && node --check src/options.mjs && node --check src/tunnel-url.mjs",
