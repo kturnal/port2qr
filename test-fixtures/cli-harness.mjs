@@ -1,8 +1,6 @@
 import {spawn} from 'node:child_process'
 import {
   chmod,
-  copyFile,
-  link,
   mkdir,
   mkdtemp,
   readFile,
@@ -75,29 +73,22 @@ function processGroupIsRunning(pid) {
   }
 }
 
-async function installFakeCloudflared(binDir, tempRoot) {
+async function installFakeCloudflared(binDir) {
   const executableName = process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared'
   const executablePath = path.join(binDir, executableName)
 
   if (process.platform === 'win32') {
-    // Windows lifecycle execution is intentionally deferred to issue #4.
-    try {
-      await link(process.execPath, executablePath)
-    } catch (error) {
-      if (error.code !== 'EXDEV') throw error
-      await copyFile(process.execPath, executablePath)
-    }
-    await copyFile(fakeTunnelPath, path.join(tempRoot, 'tunnel'))
-  } else {
-    // The explicit shim makes the fake independent of the CLI cwd and lets it
-    // observe both the --version probe and the complete tunnel command line.
-    await writeFile(executablePath, [
-      '#!/bin/sh',
-      'exec "$PORT2QR_TEST_NODE_PATH" "$PORT2QR_TEST_FAKE_TUNNEL_PATH" "$@"',
-      '',
-    ].join('\n'))
-    await chmod(executablePath, 0o755)
+    throw new Error('fake cloudflared is not implemented on Windows yet (see issue #4)')
   }
+
+  // The explicit shim makes the fake independent of the CLI cwd and lets it
+  // observe both the --version probe and the complete tunnel command line.
+  await writeFile(executablePath, [
+    '#!/bin/sh',
+    'exec "$PORT2QR_TEST_NODE_PATH" "$PORT2QR_TEST_FAKE_TUNNEL_PATH" "$@"',
+    '',
+  ].join('\n'))
+  await chmod(executablePath, 0o755)
 }
 
 async function forceStopProcessGroup(pid) {
@@ -119,7 +110,7 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
     mkdir(binDir, {recursive: true}),
     mkdir(stateDir, {recursive: true}),
   ])
-  if (fakeCloudflared) await installFakeCloudflared(binDir, tempRoot)
+  if (fakeCloudflared) await installFakeCloudflared(binDir)
 
   const runs = new Set()
   const baseEnv = {
