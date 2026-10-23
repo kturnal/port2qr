@@ -12,19 +12,19 @@ test('keeps the package metadata on the supported Node.js baseline', () => {
   const packageJson = JSON.parse(readProjectFile('package.json'))
   const packageLock = JSON.parse(readProjectFile('package-lock.json'))
 
-  assert.equal(packageJson.engines.node, '>=22')
   assert.equal(packageLock.packages[''].engines.node, packageJson.engines.node)
 })
 
-test('documents and tests only the maintained Node.js LTS lines', () => {
+test('keeps the README and CI matrix aligned with the engine floor', () => {
+  const packageJson = JSON.parse(readProjectFile('package.json'))
   const readme = readProjectFile('README.md')
   const workflow = readProjectFile('.github/workflows/test.yml')
+  const minimumVersion = packageJson.engines.node.match(/^>=(\d+)$/)?.[1]
   const matrix = workflow.match(/node-version:\s*\[([^\]]+)\]/)?.[1]
     .split(',')
     .map(version => version.trim())
 
-  assert.match(readme, /Node\.js 22 or newer/)
-  assert.match(readme, /CI currently tests Node\.js 22 and 24/)
-  assert.match(readme, /support for a release line ends when it reaches upstream end-of-life/)
-  assert.deepEqual(matrix, ['22', '24'])
+  assert.ok(minimumVersion, 'engines.node must use a >=<major> range')
+  assert.match(readme, new RegExp(`Node\\.js ${minimumVersion} or newer`))
+  assert.equal(matrix?.[0], minimumVersion)
 })

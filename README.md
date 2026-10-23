@@ -14,8 +14,8 @@ Local server → cloudflared → temporary HTTPS URL → terminal QR code → ph
   installed and available on `PATH`
 - An internet connection
 
-Runtime support follows the maintained Node.js LTS lines. CI currently tests Node.js 22 and 24,
-and support for a release line ends when it reaches upstream end-of-life.
+Runtime support follows the maintained Node.js LTS lines, and support for a release line ends when
+it reaches upstream end-of-life.
 
 Cloudflare Quick Tunnels do not require a Cloudflare account, token, domain, or inbound firewall
 rule. They are intended for development and testing, not production hosting.
