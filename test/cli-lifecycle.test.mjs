@@ -12,7 +12,6 @@ const TEST_TUNNEL_URL = 'https://deterministic-test.trycloudflare.com'
 // did not keep waiting on stopped descendants (for example zombies left by a non-reaping
 // PID 1).
 const PROMPT_EXIT_MS = 3_000
-const lifecycleTest = process.platform === 'win32' ? test.skip : test
 
 async function listen(server) {
   await new Promise((resolve, reject) => {
@@ -59,7 +58,7 @@ function assertExit(result, code) {
   assert.equal(result.signal, null)
 }
 
-lifecycleTest('uses an existing origin without treating it as an owned process', {timeout: 15_000}, async t => {
+test('uses an existing origin without treating it as an owned process', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const origin = await createExistingOrigin(t)
   const run = harness.start([String(origin.port), '--timeout', '2'])
@@ -76,7 +75,7 @@ lifecycleTest('uses an existing origin without treating it as an owned process',
   assert.equal(await harness.stateExists('origin.pid'), false)
 })
 
-lifecycleTest('starts an owned origin and passes command arguments without a shell', {timeout: 15_000}, async t => {
+test('starts an owned origin and passes command arguments without a shell', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const port = await getAvailablePort()
   const commandArgs = ['space value', '$HOME', '$(exit 91)', ';', 'exit', '92']
@@ -113,7 +112,7 @@ lifecycleTest('starts an owned origin and passes command arguments without a she
   ])
 })
 
-lifecycleTest('reports a missing cloudflared executable', {timeout: 15_000}, async t => {
+test('reports a missing cloudflared executable', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t, {fakeCloudflared: false})
   const run = harness.start(['43210'], {PATH: harness.binDir})
 
@@ -125,7 +124,7 @@ lifecycleTest('reports a missing cloudflared executable', {timeout: 15_000}, asy
   assert.equal(await harness.stateExists('tunnel.pid'), false)
 })
 
-lifecycleTest('rejects a conflicting standard Cloudflare configuration file', {timeout: 15_000}, async t => {
+test('rejects a conflicting standard Cloudflare configuration file', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const configDir = path.join(harness.homeDir, '.cloudflared')
   await mkdir(configDir, {recursive: true})
@@ -140,7 +139,7 @@ lifecycleTest('rejects a conflicting standard Cloudflare configuration file', {t
   assert.equal(await harness.stateExists('tunnel.pid'), false)
 })
 
-lifecycleTest('times out waiting for an owned origin and stops its process', {timeout: 15_000}, async t => {
+test('times out waiting for an owned origin and stops its process', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const port = await getAvailablePort()
   const run = harness.start([
@@ -163,7 +162,7 @@ lifecycleTest('times out waiting for an owned origin and stops its process', {ti
   assert.equal(await harness.stateExists('tunnel.pid'), false)
 })
 
-lifecycleTest('times out waiting for a tunnel URL and stops the tunnel', {timeout: 15_000}, async t => {
+test('times out waiting for a tunnel URL and stops the tunnel', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const origin = await createExistingOrigin(t)
   const run = harness.start([String(origin.port), '--timeout', '1'], {
@@ -178,7 +177,7 @@ lifecycleTest('times out waiting for a tunnel URL and stops the tunnel', {timeou
   assert.equal(await originResponds(origin.port), true, 'the unowned origin should still be running')
 })
 
-lifecycleTest('reports a local command that exits before the origin is ready', {timeout: 15_000}, async t => {
+test('reports a local command that exits before the origin is ready', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const port = await getAvailablePort()
   const run = harness.start([
@@ -205,7 +204,20 @@ lifecycleTest('reports a local command that exits before the origin is ready', {
   assert.equal(await harness.stateExists('tunnel.pid'), false)
 })
 
-lifecycleTest('reports a tunnel that exits before publishing a URL', {timeout: 15_000}, async t => {
+test('reports a local command that cannot start', {timeout: 15_000}, async t => {
+  const harness = await createCliHarness(t)
+  const port = await getAvailablePort()
+  const run = harness.start([String(port), '--', 'port2qr-missing-local-command'])
+
+  const result = await run.waitForExit()
+
+  assertExit(result, 1)
+  assert.match(run.stderr, /Local command could not start: .*ENOENT/)
+  assert.doesNotMatch(run.stderr, /TypeError/)
+  assert.equal(await harness.stateExists('tunnel.pid'), false)
+})
+
+test('reports a tunnel that exits before publishing a URL', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const origin = await createExistingOrigin(t)
   const run = harness.start([String(origin.port), '--timeout', '2'], {
@@ -221,7 +233,7 @@ lifecycleTest('reports a tunnel that exits before publishing a URL', {timeout: 1
   await harness.assertProcessStopped('tunnel.pid')
 })
 
-lifecycleTest('reports a tunnel that exits after publishing a URL and stops its peer group', {timeout: 15_000}, async t => {
+test('reports a tunnel that exits after publishing a URL and stops its peer group', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const port = await getAvailablePort()
   const run = harness.start([
@@ -251,7 +263,35 @@ lifecycleTest('reports a tunnel that exits after publishing a URL and stops its 
   ])
 })
 
-lifecycleTest('handles SIGINT while the owned origin is starting', {timeout: 15_000}, async t => {
+test('reports a local command that exits after publishing a URL and stops its peer tunnel', {timeout: 15_000}, async t => {
+  const harness = await createCliHarness(t)
+  const port = await getAvailablePort()
+  const run = harness.start([
+    String(port),
+    '--timeout',
+    '3',
+    '--',
+    process.execPath,
+    originFixturePath,
+  ], {
+    PORT2QR_ORIGIN_PORT: String(port),
+    PORT2QR_ORIGIN_SPAWN_CHILD: '1',
+  })
+
+  await run.waitForOutput(/Scan the QR code on your phone/)
+  const originPid = Number((await harness.readState('origin.pid')).trim())
+  process.kill(originPid, 'SIGKILL')
+  const result = await run.waitForExit()
+
+  assertExit(result, 1)
+  assert.match(run.stderr, /Local command exited unexpectedly/)
+  await Promise.all([
+    harness.assertPidStopped('origin-child.pid'),
+    harness.assertProcessStopped('tunnel.pid'),
+  ])
+})
+
+test('handles SIGINT while the owned origin is starting', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const port = await getAvailablePort()
   const run = harness.start([
@@ -276,7 +316,7 @@ lifecycleTest('handles SIGINT while the owned origin is starting', {timeout: 15_
   assert.equal(await harness.stateExists('tunnel.pid'), false)
 })
 
-lifecycleTest('handles SIGINT while waiting for the tunnel URL', {timeout: 15_000}, async t => {
+test('handles SIGINT while waiting for the tunnel URL', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const port = await getAvailablePort()
   const run = harness.start([
@@ -305,7 +345,7 @@ lifecycleTest('handles SIGINT while waiting for the tunnel URL', {timeout: 15_00
   ])
 })
 
-lifecycleTest('handles SIGINT after printing the QR URL and stops both owned processes', {timeout: 15_000}, async t => {
+test('handles SIGINT after printing the QR URL and stops both owned processes', {timeout: 15_000}, async t => {
   const harness = await createCliHarness(t)
   const port = await getAvailablePort()
   const run = harness.start([

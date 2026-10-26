@@ -24,6 +24,7 @@ test('publishes the runtime files plus the security policy', () => {
     'package.json',
     'src/options.mjs',
     'src/process-liveness.mjs',
+    'src/process-tree.mjs',
     'src/tunnel-url.mjs',
   ])
 })

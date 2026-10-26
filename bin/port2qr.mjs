@@ -10,7 +10,7 @@ import process from 'node:process'
 import {createRequire} from 'node:module'
 import qrcode from 'qrcode-terminal'
 import {HELP, parseArgs} from '../src/options.mjs'
-import {processGroupIsRunning} from '../src/process-liveness.mjs'
+import {spawnProcessTree, stopProcessTree, stopProcessTreeSync} from '../src/process-tree.mjs'
 import {findQuickTunnelUrl} from '../src/tunnel-url.mjs'
 
 const require = createRequire(import.meta.url)
@@ -34,7 +34,7 @@ const stopRequested = new Promise(resolve => {
   resolveStop = resolve
 })
 
-for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK']) {
   process.once(signal, () => {
     shuttingDown = true
     cancellationReason ??= new StopRequestedError()
@@ -141,10 +141,7 @@ function startCommand(command) {
   if (command.length === 0) return null
   const executable = isWindows && command[0] === 'npm' ? 'npm.cmd' : command[0]
   console.log(`Starting local command: ${command[0]} (${command.length - 1} argument(s))`)
-  const child = spawn(executable, command.slice(1), {
-    detached: !isWindows,
-    stdio: 'inherit',
-  })
+  const child = spawnProcessTree(executable, command.slice(1), {stdio: 'inherit'})
   monitor(child, 'Local command')
   return child
 }
@@ -155,10 +152,7 @@ function startTunnel(origin, hostHeader) {
   args.push('--no-autoupdate')
 
   console.log('Starting a temporary Cloudflare Quick Tunnel ...')
-  const child = spawn('cloudflared', args, {
-    detached: !isWindows,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  })
+  const child = spawnProcessTree('cloudflared', args, {stdio: ['ignore', 'pipe', 'pipe']})
   monitor(child, 'Cloudflare Tunnel')
   return child
 }
@@ -199,39 +193,11 @@ function renderQr(url) {
   console.log('Scan the QR code on your phone. Press Ctrl+C to stop the tunnel and expire the URL.')
 }
 
-function processIsRunning(child) {
-  if (!child) return false
-  if (isWindows) return child.exitCode === null && child.signalCode === null
-  return processGroupIsRunning(child.pid)
-}
-
-function signalProcess(child, signal) {
-  if (!processIsRunning(child)) return
-  try {
-    if (isWindows) child.kill(signal)
-    else process.kill(-child.pid, signal)
-  } catch (error) {
-    if (error.code !== 'ESRCH') throw error
-  }
-}
-
-async function stopProcess(child) {
-  if (!processIsRunning(child)) return
-  signalProcess(child, 'SIGTERM')
-  const deadline = Date.now() + 3_000
-  while (processIsRunning(child) && Date.now() < deadline) await delay(50)
-  if (processIsRunning(child)) {
-    signalProcess(child, 'SIGKILL')
-    const killDeadline = Date.now() + 1_000
-    while (processIsRunning(child) && Date.now() < killDeadline) await delay(50)
-  }
-}
-
 function stopChildrenSynchronously() {
   shuttingDown = true
   for (const child of children) {
     try {
-      signalProcess(child, 'SIGTERM')
+      stopProcessTreeSync(child)
     } catch {
       // Best effort during process exit; async cleanup handles normal exits.
     }
@@ -271,7 +237,7 @@ async function run(options) {
   } finally {
     shuttingDown = true
     if (!failed) console.log('\nStopping port2qr ...')
-    await Promise.all([stopProcess(tunnelProcess), stopProcess(commandProcess)])
+    await Promise.all([stopProcessTree(tunnelProcess), stopProcessTree(commandProcess)])
     process.exitCode = failed ? 1 : 0
   }
 }

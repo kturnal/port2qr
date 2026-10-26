@@ -24,3 +24,16 @@ jobs:
       - run: npm test
       - name: Run lifecycle tests under a non-reaping PID 1
         run: sudo unshare --pid --fork --mount-proc "$(command -v node)" --test test/cli-lifecycle.test.mjs
+
+  windows:
+    name: Windows (Node.js 24)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test

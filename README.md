@@ -52,7 +52,7 @@ port2qr 5173 -- npm run dev
 ```
 
 The arguments after `--` are passed directly to the program without a shell. Press Ctrl+C to stop
-the local command and tunnel. The random `trycloudflare.com` URL expires when the tunnel stops.
+the local command, the tunnel, and any processes they started. The random `trycloudflare.com` URL expires when the tunnel stops.
 
 Use a custom local origin or Host header:
 

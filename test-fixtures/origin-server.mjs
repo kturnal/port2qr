@@ -17,7 +17,10 @@ writeFileSync(
 )
 
 if (process.env.PORT2QR_ORIGIN_SPAWN_CHILD === '1') {
+  // On Windows, Node ends the children it did not detach when it exits. Detaching keeps the
+  // descendant alive past this process, like the Node process that npm.cmd starts.
   const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    detached: process.platform === 'win32',
     stdio: 'ignore',
   })
   writeFileSync(path.join(stateDir, 'origin-child.pid'), `${child.pid}\n`)

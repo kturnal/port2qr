@@ -14,7 +14,7 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "check": "node --check bin/port2qr.mjs && node --check src/options.mjs && node --check src/process-liveness.mjs && node --check src/tunnel-url.mjs",
+    "check": "node --check bin/port2qr.mjs && node --check src/options.mjs && node --check src/process-liveness.mjs && node --check src/process-tree.mjs && node --check src/tunnel-url.mjs",
     "test": "node --test",
     "prepublishOnly": "npm run check && npm test"
   },
