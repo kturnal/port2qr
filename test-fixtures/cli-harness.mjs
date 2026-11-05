@@ -1,6 +1,8 @@
-import {spawn} from 'node:child_process'
+import {execFile, spawn} from 'node:child_process'
 import {
   chmod,
+  copyFile,
+  link,
   mkdir,
   mkdtemp,
   readFile,
@@ -20,6 +22,8 @@ import {
 const packageRoot = fileURLToPath(new URL('..', import.meta.url))
 const cliPath = path.join(packageRoot, 'bin', 'port2qr.mjs')
 const fakeTunnelPath = fileURLToPath(new URL('./fake-tunnel.cjs', import.meta.url))
+const signalRelayUrl = new URL('./signal-relay.mjs', import.meta.url).href
+const isWindows = process.platform === 'win32'
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -59,16 +63,28 @@ function processGroupIsRunning(pid) {
   return posixProcessGroupIsRunning(pid)
 }
 
-async function installFakeCloudflared(binDir) {
-  const executableName = process.platform === 'win32' ? 'cloudflared.exe' : 'cloudflared'
-  const executablePath = path.join(binDir, executableName)
-
-  if (process.platform === 'win32') {
-    throw new Error('fake cloudflared is not implemented on Windows yet (see issue #4)')
+async function installFakeCloudflared(binDir, cwd) {
+  if (isWindows) {
+    // Node.js spawns only real executables on PATH without a shell, so the fake is a copy
+    // of node.exe. It handles --version itself, and "cloudflared tunnel ..." runs the
+    // "tunnel" script from the CLI's working directory, so the tunnel PID is the fake's own.
+    const executablePath = path.join(binDir, 'cloudflared.exe')
+    try {
+      await link(process.execPath, executablePath)
+    } catch {
+      await copyFile(process.execPath, executablePath)
+    }
+    await writeFile(path.join(cwd, 'tunnel'), [
+      "process.argv.splice(2, 0, 'tunnel')",
+      `require(${JSON.stringify(fakeTunnelPath)})`,
+      '',
+    ].join('\n'))
+    return
   }
 
   // The explicit shim makes the fake independent of the CLI cwd and lets it
   // observe both the --version probe and the complete tunnel command line.
+  const executablePath = path.join(binDir, 'cloudflared')
   await writeFile(executablePath, [
     '#!/bin/sh',
     'exec "$PORT2QR_TEST_NODE_PATH" "$PORT2QR_TEST_FAKE_TUNNEL_PATH" "$@"',
@@ -77,10 +93,20 @@ async function installFakeCloudflared(binDir) {
   await chmod(executablePath, 0o755)
 }
 
+function taskkillTree(pid) {
+  return new Promise(resolve => {
+    execFile('taskkill', ['/PID', String(pid), '/T', '/F'], {windowsHide: true}, () => resolve())
+  })
+}
+
 async function forceStopProcessGroup(pid) {
   if (!processGroupIsRunning(pid)) return
+  if (isWindows) {
+    await taskkillTree(pid)
+    return
+  }
   try {
-    process.kill(process.platform === 'win32' ? pid : -pid, 'SIGKILL')
+    process.kill(-pid, 'SIGKILL')
   } catch (error) {
     if (error.code !== 'ESRCH') throw error
   }
@@ -96,7 +122,7 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
     mkdir(binDir, {recursive: true}),
     mkdir(stateDir, {recursive: true}),
   ])
-  if (fakeCloudflared) await installFakeCloudflared(binDir)
+  if (fakeCloudflared) await installFakeCloudflared(binDir, tempRoot)
 
   const runs = new Set()
   const baseEnv = {
@@ -110,10 +136,11 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
   }
 
   function start(args, env = {}) {
-    const child = spawn(process.execPath, [cliPath, ...args], {
+    const execArgs = isWindows ? ['--import', signalRelayUrl, cliPath, ...args] : [cliPath, ...args]
+    const child = spawn(process.execPath, execArgs, {
       cwd: tempRoot,
       env: {...baseEnv, ...env},
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['ignore', 'pipe', 'pipe', ...(isWindows ? ['ipc'] : [])],
     })
     const output = {stdout: '', stderr: ''}
     child.stdout.setEncoding('utf8')
@@ -131,7 +158,10 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
       child,
       get stderr() { return output.stderr },
       get stdout() { return output.stdout },
-      signal(signal) { child.kill(signal) },
+      signal(signal) {
+        if (isWindows) child.send({type: 'signal', signal})
+        else child.kill(signal)
+      },
       waitForExit(timeoutMs = 8_000) {
         return withTimeout(
           completion,
@@ -207,7 +237,7 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
         run.child.kill('SIGKILL')
       }
     }
-    for (const pidFile of ['origin.pid', 'tunnel.pid']) {
+    for (const pidFile of ['origin.pid', 'origin-child.pid', 'tunnel.pid']) {
       if (!await stateExists(pidFile)) continue
       const pid = Number((await readState(pidFile)).trim())
       await forceStopProcessGroup(pid)
@@ -217,6 +247,7 @@ export async function createCliHarness(t, {fakeCloudflared = true} = {}) {
 
   return {
     binDir,
+    cwd: tempRoot,
     homeDir,
     readState,
     readStateJson,

@@ -54,6 +54,11 @@ port2qr 5173 -- npm run dev
 The arguments after `--` are passed directly to the program without a shell. Press Ctrl+C to stop
 the local command and tunnel. The random `trycloudflare.com` URL expires when the tunnel stops.
 
+When `port2qr` stops, it also stops every process the local command and `cloudflared` started. On
+macOS and Linux it signals their process groups with `SIGTERM`, then `SIGKILL` after 3 seconds. On
+Windows it ends each process tree with `taskkill /T /F`, and it runs `npm` and `npx` through their
+JavaScript entry points because Windows cannot start their `.cmd` shims without a shell.
+
 Use a custom local origin or Host header:
 
 ```bash
