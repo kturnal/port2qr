@@ -7,32 +7,46 @@ on:
 permissions:
   contents: read
 
+# Job names are referenced by branch protection; keep them stable.
 jobs:
-  test:
+  unit:
+    name: Unit tests (Node.js ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         node-version: [22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm test
-      - name: Run lifecycle tests under a non-reaping PID 1
-        run: sudo unshare --pid --fork --mount-proc "$(command -v node)" --test test/cli-lifecycle.test.mjs
+      - run: npm run test:unit
 
-  windows:
-    runs-on: windows-latest
+  lifecycle:
+    name: Lifecycle tests (${{ matrix.os-name }}, Node.js 24)
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            os-name: Linux
+          - os: macos-latest
+            os-name: macOS
+          - os: windows-latest
+            os-name: Windows
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm run check
-      - run: npm test
+      - run: npm run test:lifecycle
+      - name: Run lifecycle tests under a non-reaping PID 1
+        if: runner.os == 'Linux'
+        run: sudo unshare --pid --fork --mount-proc "$(command -v node)" --test test/integration/cli-lifecycle.test.mjs

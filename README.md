@@ -96,7 +96,7 @@ mounted for the container's PID namespace, as Docker and `unshare --mount-proc` 
 the container with `docker run --init`. CI checks this case with:
 
 ```bash
-sudo unshare --pid --fork --mount-proc "$(command -v node)" --test test/cli-lifecycle.test.mjs
+sudo unshare --pid --fork --mount-proc "$(command -v node)" --test test/integration/cli-lifecycle.test.mjs
 ```
 
 ## License
