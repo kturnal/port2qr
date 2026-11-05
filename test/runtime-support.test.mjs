@@ -34,7 +34,10 @@ test('keeps the CI job names and lifecycle operating systems stable', () => {
 
   // Branch protection selects required checks by these names.
   assert.match(workflow, /name: Unit tests \(Node\.js \$\{\{ matrix\.node-version \}\}\)/)
-  assert.match(workflow, /name: Lifecycle tests \(\$\{\{ matrix\.os-name \}\}, Node\.js 24\)/)
+  assert.match(
+    workflow,
+    /name: Lifecycle tests \(\$\{\{ matrix\.os-name \}\}, Node\.js \$\{\{ matrix\.node-version \}\}\)/
+  )
   for (const os of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
     assert.match(workflow, new RegExp(`- os: ${os}\\n`))
   }

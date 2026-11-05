@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [22, 24]
+        node-version: [22, 24, 26]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -27,23 +27,33 @@ jobs:
       - run: npm run test:unit
 
   lifecycle:
-    name: Lifecycle tests (${{ matrix.os-name }}, Node.js 24)
+    name: Lifecycle tests (${{ matrix.os-name }}, Node.js ${{ matrix.node-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Linux runs every supported LTS line; macOS and Windows run Node.js 24.
           - os: ubuntu-latest
             os-name: Linux
+            node-version: 22
+          - os: ubuntu-latest
+            os-name: Linux
+            node-version: 24
+          - os: ubuntu-latest
+            os-name: Linux
+            node-version: 26
           - os: macos-latest
             os-name: macOS
+            node-version: 24
           - os: windows-latest
             os-name: Windows
+            node-version: 24
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version: ${{ matrix.node-version }}
           cache: npm
       - run: npm ci
       - run: npm run test:lifecycle
