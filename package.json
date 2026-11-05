@@ -1,6 +1,6 @@
 {
   "name": "port2qr",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Share a local web server through a temporary Cloudflare Tunnel and scan it from a phone.",
   "type": "module",
   "bin": {
