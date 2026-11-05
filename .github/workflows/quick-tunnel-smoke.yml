@@ -1,0 +1,63 @@
+name: Quick Tunnel smoke test
+
+# Opt-in release evidence against a real Cloudflare Quick Tunnel. It is never triggered by
+# pushes or pull requests, so it is not a required check. It needs no Cloudflare account,
+# token, domain or repository secret.
+on:
+  workflow_dispatch:
+    inputs:
+      cloudflared-version:
+        description: cloudflared release to test with (for example 2026.10.0), or "latest"
+        required: true
+        default: latest
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quick-tunnel-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: Quick Tunnel smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Install cloudflared from Cloudflare's GitHub releases
+        env:
+          CLOUDFLARED_VERSION: ${{ inputs.cloudflared-version || 'latest' }}
+        run: |
+          if [ "$CLOUDFLARED_VERSION" = latest ]; then
+            base=https://github.com/cloudflare/cloudflared/releases/latest/download
+          elif printf '%s' "$CLOUDFLARED_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            base="https://github.com/cloudflare/cloudflared/releases/download/$CLOUDFLARED_VERSION"
+          else
+            echo "::error::Invalid cloudflared version: $CLOUDFLARED_VERSION"
+            exit 1
+          fi
+          curl --fail --silent --show-error --location --output "$RUNNER_TEMP/cloudflared.deb" \
+            "$base/cloudflared-linux-amd64.deb"
+          sudo dpkg --install "$RUNNER_TEMP/cloudflared.deb"
+          cloudflared --version
+
+      - name: Expose a disposable marker through a real Quick Tunnel
+        run: node scripts/quick-tunnel-smoke.mjs
+
+      - name: Verify that no tunnel or local server remains
+        if: always()
+        run: |
+          leftovers=$(pgrep -f 'cloudflared tunnel|smoke-marker-server' || true)
+          if [ -n "$leftovers" ]; then
+            echo "::error::Processes left running: $leftovers"
+            kill -KILL $leftovers || true
+            exit 1
+          fi
+          echo "No cloudflared tunnel or smoke server is running."
