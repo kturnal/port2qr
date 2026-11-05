@@ -14,7 +14,7 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "check": "node --check bin/port2qr.mjs && node --check src/command.mjs && node --check src/options.mjs && node --check src/process-liveness.mjs && node --check src/process-tree.mjs && node --check src/tunnel-url.mjs && node --check scripts/quick-tunnel-smoke.mjs && node --check scripts/smoke-marker-server.mjs",
+    "check": "node --check bin/port2qr.mjs && node --check src/command.mjs && node --check src/options.mjs && node --check src/process-liveness.mjs && node --check src/process-tree.mjs && node --check src/tunnel-url.mjs && node --check scripts/quick-tunnel-smoke.mjs && node --check scripts/smoke-marker-server.mjs && node --check scripts/release-check.mjs",
     "test": "node --test",
     "test:unit": "node --test \"test/*.test.mjs\"",
     "test:lifecycle": "node --test \"test/integration/*.test.mjs\"",
