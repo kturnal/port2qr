@@ -35,3 +35,27 @@ test('resolves the security policy link in the packaged README', () => {
   assert.ok(link, 'the README should link to the security policy')
   assert.ok(packedFilePaths().includes(link), `the package should ship ${link}`)
 })
+
+// GitHub's heading anchors: lower case, punctuation removed, spaces as hyphens.
+function headingAnchors(markdown) {
+  return new Set([...markdown.matchAll(/^#{1,6} (.+)$/gm)].map(([, heading]) => heading
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N} _-]/gu, '')
+    .replace(/ /g, '-')))
+}
+
+test('resolves every relative link in the packaged documents', () => {
+  const packed = packedFilePaths()
+  for (const document of ['README.md', 'SECURITY.md']) {
+    const markdown = readFileSync(new URL(`../${document}`, import.meta.url), 'utf8')
+    const anchors = headingAnchors(markdown)
+    for (const [, target] of markdown.matchAll(/\]\(([^)\s]+)\)/g)) {
+      if (/^https?:\/\//.test(target)) continue
+      if (target.startsWith('#')) {
+        assert.ok(anchors.has(target.slice(1)), `${document} links to a missing heading: ${target}`)
+      } else {
+        assert.ok(packed.includes(target), `${document} links to ${target}, which is not packaged`)
+      }
+    }
+  }
+})
