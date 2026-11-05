@@ -1,0 +1,136 @@
+name: Release
+
+# Publishes a vX.Y.Z tag to npm with provenance through npm trusted publishing (GitHub
+# Actions OIDC), then creates the matching GitHub release. No npm token is stored.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Check the tag against package.json
+        id: version
+        run: node scripts/release-check.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Require the tagged commit to be on main
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main."
+            exit 1
+          fi
+
+      - name: Refuse a version that is already released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set +e
+          published=$(npm view "port2qr@$VERSION" version 2>&1)
+          status=$?
+          set -e
+          if [ $status -eq 0 ] && [ -n "$published" ]; then
+            echo "::error::port2qr@$VERSION is already on npm; nothing was changed."
+            exit 1
+          fi
+          if [ $status -ne 0 ] && ! printf '%s' "$published" | grep -q E404; then
+            echo "$published"
+            echo "::error::Could not check npm for port2qr@$VERSION."
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::GitHub release $GITHUB_REF_NAME already exists; nothing was changed."
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm run check
+      # Includes the package-content assertion in test/package-contents.test.mjs.
+      - run: npm test
+
+      - name: Pack the release tarball
+        id: pack
+        run: |
+          tarball=$(npm pack --json | node -e "let s='';process.stdin.on('data',c=>s+=c).on('end',()=>console.log(JSON.parse(s)[0].filename))")
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          sha256sum "$tarball" | tee "$tarball.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: |
+            ${{ steps.pack.outputs.tarball }}
+            ${{ steps.pack.outputs.tarball }}.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - run: npm install --global npm@^11.5.1
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+      # The npm trusted publisher must allow direct "npm publish" for this workflow
+      # (release.yml) and environment (npm).
+      - name: Publish the verified tarball with provenance
+        env:
+          TARBALL: ${{ needs.verify.outputs.tarball }}
+        run: |
+          sha256sum --check "$TARBALL.sha256"
+          npm publish "./$TARBALL" --access public --provenance
+
+  github-release:
+    name: Create GitHub release
+    needs: [verify, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+      - name: Create the release for the tagged commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARBALL: ${{ needs.verify.outputs.tarball }}
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "$TARBALL" "$TARBALL.sha256" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "port2qr $VERSION" \
+            --generate-notes \
+            --notes "Published to npm as [port2qr@$VERSION](https://www.npmjs.com/package/port2qr/v/$VERSION) with provenance from commit $GITHUB_SHA."
