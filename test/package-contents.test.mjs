@@ -2,15 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {execFileSync} from 'node:child_process'
 import {readFileSync} from 'node:fs'
+import {resolveCommand} from '../src/command.mjs'
 
 const packageRoot = new URL('..', import.meta.url)
 
 function packedFilePaths() {
-  const stdout = execFileSync('npm', ['pack', '--dry-run', '--json'], {
-    cwd: packageRoot,
-    encoding: 'utf8',
-    shell: true,
-  })
+  // resolveCommand runs npm without a shell on Windows too.
+  const {file, args} = resolveCommand(['npm', 'pack', '--dry-run', '--json'])
+  const stdout = execFileSync(file, args, {cwd: packageRoot, encoding: 'utf8'})
   const [manifest] = JSON.parse(stdout)
   return manifest.files.map((file) => file.path)
 }

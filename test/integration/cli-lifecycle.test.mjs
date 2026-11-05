@@ -5,7 +5,7 @@ import {mkdir, writeFile} from 'node:fs/promises'
 import path from 'node:path'
 import process from 'node:process'
 import test from 'node:test'
-import {createCliHarness, originFixturePath} from '../test-fixtures/cli-harness.mjs'
+import {createCliHarness, originFixturePath} from '../../test-fixtures/cli-harness.mjs'
 
 const TEST_TUNNEL_URL = 'https://deterministic-test.trycloudflare.com'
 // The CLI escalates to SIGKILL after a 3-second graceful wait, so exiting sooner shows it

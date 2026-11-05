@@ -28,3 +28,14 @@ test('keeps the README and CI matrix aligned with the engine floor', () => {
   assert.match(readme, new RegExp(`Node\\.js ${minimumVersion} or newer`))
   assert.equal(matrix?.[0], minimumVersion)
 })
+
+test('keeps the CI job names and lifecycle operating systems stable', () => {
+  const workflow = readProjectFile('.github/workflows/test.yml')
+
+  // Branch protection selects required checks by these names.
+  assert.match(workflow, /name: Unit tests \(Node\.js \$\{\{ matrix\.node-version \}\}\)/)
+  assert.match(workflow, /name: Lifecycle tests \(\$\{\{ matrix\.os-name \}\}, Node\.js 24\)/)
+  for (const os of ['ubuntu-latest', 'macos-latest', 'windows-latest']) {
+    assert.match(workflow, new RegExp(`- os: ${os}\\n`))
+  }
+})
